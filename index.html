@@ -128,8 +128,19 @@
   .pad.free button.fire { width: calc(var(--btn, 60px) * 1.2); height: calc(var(--btn, 60px) * 1.2); }
   .pad.free.p1 button span { transform: rotate(90deg); }
   .pad.free.p2 button span { transform: rotate(-90deg); }
-  /* Player 2's fire button takes the top-right corner, so Pause and Sound move to the middle of the left strip */
-  #stage.two #corner { top: 50%; left: 12px; right: auto; transform: translateY(-50%); flex-direction: column; }
+  /* On touch screens Pause and Sound become upright bars halfway down the side strips, hugging the
+     arena: Pause on the left, Sound on the right, clear of the pads in the corners */
+  #stage.touch #corner { inset: 0; display: block; pointer-events: none; }
+  #stage.touch #corner button {
+    position: absolute; top: 50%; pointer-events: auto;
+    writing-mode: vertical-rl; text-transform: uppercase;
+    font-family: "Press Start 2P", ui-monospace, monospace; font-size: 10px; line-height: 1;
+    padding: 10px 7px;
+    background: rgba(2, 4, 6, 0.6);
+  }
+  #stage.touch #pauseBtn { left: calc(var(--ox, 0px) - 8px); transform: translate(-100%, -50%); }
+  /* Text runs along each bar, facing the player on that side: Sound is turned round for player 2 */
+  #stage.touch #mute { left: calc(100% - var(--ox, 0px) + 8px); transform: translateY(-50%) rotate(180deg); }
   /* On touch screens the keyboard help is irrelevant, and the card has to fit a landscape phone between the pads */
   #stage.touch .keys, #stage.touch .hint { display: none; }
   #stage.touch .card { max-width: min(480px, calc(100% - 2 * var(--side, 0px))); padding: 18px 18px 16px; gap: 12px; }
@@ -151,7 +162,7 @@
   <canvas id="game" aria-label="Rip Off game"></canvas>
   <div id="corner">
     <button id="pauseBtn" type="button" hidden>Pause</button>
-    <button id="mute" type="button">Sound: on</button>
+    <button id="mute" type="button">Sound on</button>
   </div>
 
   <div class="panel" id="titlePanel">
@@ -250,6 +261,7 @@
     sc = Math.min((W - side * 2) / WW, H / WH);
     ox = (W - WW * sc) / 2;
     oy = (H - WH * sc) / 2;
+    stageEl.style.setProperty('--ox', Math.round(ox) + 'px');
     layoutPads();
   }
   let btnSize = 60, padInset = 0;
@@ -350,7 +362,7 @@
   function toggleMute() {
     muted = !muted;
     if (master) master.gain.value = muted ? 0 : 0.35;
-    document.getElementById('mute').textContent = muted ? 'Sound: off' : 'Sound: on';
+    document.getElementById('mute').textContent = muted ? 'Sound off' : 'Sound on';
   }
   document.getElementById('mute').addEventListener('click', e => { initAudio(); toggleMute(); e.currentTarget.blur(); });
 
@@ -983,9 +995,7 @@
       const [pi, keys] = layout[side];
       pad.className = 'pad p' + (pi + 1) + (numP === 2 ? ' free' : '');
       pad.replaceChildren(...keys.map(k => makePadButton(pi, k)));
-    });
-    stageEl.classList.toggle('two', numP === 2);
-    layoutPads();
+    });    layoutPads();
   }
   function makePadButton(pi, k) {
     const btn = document.createElement('button');
