@@ -97,29 +97,43 @@
   button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
   .hint { font-size: 11px; color: var(--dim); margin: 0; letter-spacing: 0.06em; text-transform: uppercase; }
 
-  #touch {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    display: flex; justify-content: space-between; align-items: flex-end;
-    padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
-    pointer-events: none;
+  /* Phones and tablets held upright: the whole game is turned sideways so it always plays in landscape */
+  #stage.rotated { position: fixed; top: 0; left: 0; transform-origin: 0 0; }
+
+  /* Touch pads sit in the strips left and right of the arena: player 1 on the left, player 2 on the right */
+  #touch { position: absolute; inset: 0; pointer-events: none; }
+  .pad {
+    --pc: 61, 245, 255;
+    position: absolute; bottom: 16px;
+    display: grid; grid-template-columns: repeat(2, var(--btn, 60px)); gap: 8px;
   }
-  #touch .grp { display: flex; gap: 10px; }
-  #touch button {
+  .pad.p2 { --pc: 255, 179, 71; }
+  #padL { left: 12px; }
+  #padR { right: 12px; }
+  .pad button {
     pointer-events: auto;
-    width: 64px; height: 64px; border-radius: 50%;
-    background: rgba(61, 245, 255, 0.1);
-    border: 1px solid var(--line);
-    color: var(--ink);
-    font-family: "Press Start 2P", ui-monospace, monospace; font-size: 10px;
-    touch-action: none;
+    width: var(--btn, 60px); height: var(--btn, 60px); border-radius: 50%;
+    background: rgba(var(--pc), 0.1);
+    border: 1px solid rgba(var(--pc), 0.5);
+    color: rgb(var(--pc));
+    font-family: "Press Start 2P", ui-monospace, monospace; font-size: 9px;
+    touch-action: none; padding: 0;
   }
-  #touch button.on { background: rgba(61, 245, 255, 0.35); }
-  #touch button[data-k="fire"] { width: 76px; height: 76px; }
-  @media (max-width: 480px) {
-    #touch .grp { gap: 6px; }
-    #touch button { width: 56px; height: 56px; font-size: 8px; }
-    #touch button[data-k="fire"] { width: 66px; height: 66px; }
-  }
+  .pad button.on { background: rgba(var(--pc), 0.38); }
+  .pad button span { display: inline-block; }
+  /* Two players face each other from the short ends of the screen: buttons are placed one by one
+     (see layoutPads), and each pad's labels are turned to read the right way up for its player */
+  #padL.free, #padR.free { inset: 0; display: block; }
+  .pad.free button { position: absolute; transform: translate(-50%, -50%); }
+  .pad.free button.fire { width: calc(var(--btn, 60px) * 1.2); height: calc(var(--btn, 60px) * 1.2); }
+  .pad.free.p1 button span { transform: rotate(90deg); }
+  .pad.free.p2 button span { transform: rotate(-90deg); }
+  /* Player 2's fire button takes the top-right corner, so Pause and Sound move to the middle of the left strip */
+  #stage.two #corner { top: 50%; left: 12px; right: auto; transform: translateY(-50%); flex-direction: column; }
+  /* On touch screens the keyboard help is irrelevant, and the card has to fit a landscape phone between the pads */
+  #stage.touch .keys, #stage.touch .hint { display: none; }
+  #stage.touch .card { max-width: min(480px, calc(100% - 2 * var(--side, 0px))); padding: 18px 18px 16px; gap: 12px; }
+  #stage.touch .sub { font-size: 12px; line-height: 1.45; }
   #corner {
     position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); right: 16px;
     display: flex; gap: 8px; z-index: 2;
@@ -172,14 +186,8 @@
   </div>
 
   <div id="touch" hidden>
-    <div class="grp">
-      <button type="button" data-k="left" aria-label="Rotate left">◀</button>
-      <button type="button" data-k="right" aria-label="Rotate right">▶</button>
-    </div>
-    <div class="grp">
-      <button type="button" data-k="thrust" aria-label="Thrust">▲</button>
-      <button type="button" data-k="fire" aria-label="Fire">FIRE</button>
-    </div>
+    <div class="pad" id="padL"></div>
+    <div class="pad" id="padR"></div>
   </div>
 </div>
 
@@ -219,20 +227,62 @@
   const cv = document.getElementById('game');
   const ctx = cv.getContext('2d');
   const touchEl = document.getElementById('touch');
-  let W = 0, H = 0, dpr = 1, sc = 1, ox = 0, oy = 0;
+  const stageEl = document.getElementById('stage');
+  let W = 0, H = 0, dpr = 1, sc = 1, ox = 0, oy = 0, isTouch = false;
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     W = cv.clientWidth; H = cv.clientHeight;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-    sc = Math.min(W / WW, H / WH);
+    // With touch controls, keep a strip clear on each side of the arena for the pads
+    let side = 0;
+    if (!touchEl.hidden) {
+      side = Math.min(150, W * 0.2);
+      // The two-player corner triangle is about 2.1 buttons wide
+      btnSize = clamp(Math.floor((side - 16) / 2.1), 44, 64);
+      stageEl.style.setProperty('--btn', btnSize + 'px');
+      stageEl.style.setProperty('--side', Math.round(side) + 'px');
+    }
+    sc = Math.min((W - side * 2) / WW, H / WH);
     ox = (W - WW * sc) / 2;
     oy = (H - WH * sc) / 2;
-    // In portrait with touch controls, lift the arena so the buttons sit below it
-    const spare = H - WH * sc;
-    if (!touchEl.hidden && spare > 180) oy = Math.max(8, (spare - 150) / 2);
+    layoutPads();
   }
-  window.addEventListener('resize', resize);
+  let btnSize = 60;
+  // Two-player layout, in screen pixels. Player 1 sits at the left end looking right, so their left
+  // hand is at the top: turn-left above turn-right, thrust between them pointing at the arena, and fire
+  // in the bottom corner under their right hand. Player 2 gets the same layout turned 180 degrees.
+  function layoutPads() {
+    if (touchEl.hidden || numP !== 2) return;
+    const b = btnSize, m = 12, x0 = m + b / 2, y0 = m + b / 2;
+    const spots = {
+      left: [x0, y0],
+      right: [x0, y0 + 1.25 * b],
+      thrust: [x0 + 1.08 * b, y0 + 0.625 * b],
+      fire: [m + b * 0.6, H - m - b * 0.6]
+    };
+    for (const btn of touchEl.querySelectorAll('.free button')) {
+      let [x, y] = spots[btn.dataset.k];
+      if (btn.dataset.p === '1') { x = W - x; y = H - y; }
+      btn.style.left = x + 'px';
+      btn.style.top = y + 'px';
+    }
+  }
+  // Touch devices held upright get the stage turned 90 degrees, so the game is always landscape
+  function applyOrientation() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const rotate = isTouch && vh > vw;
+    stageEl.classList.toggle('rotated', rotate);
+    if (rotate) {
+      stageEl.style.width = vh + 'px';
+      stageEl.style.height = vw + 'px';
+      stageEl.style.transform = `translateX(${vw}px) rotate(90deg)`;
+    } else {
+      stageEl.style.width = stageEl.style.height = stageEl.style.transform = '';
+    }
+    resize();
+  }
+  window.addEventListener('resize', applyOrientation);
   resize();
 
   const stars = Array.from({ length: 90 }, () => ({
@@ -383,6 +433,8 @@
     players = [];
     for (let i = 0; i < n; i++) players.push(makePlayer(i));
     wave = 0; betweenWaves = true; waveGap = 1.0; banner = null;
+    if (!touchEl.hidden) buildPads();
+    lockLandscape();
     initAudio();
   }
 
@@ -532,7 +584,7 @@
     Enter: [1, 'fire'], NumpadEnter: [1, 'fire'], ControlRight: [1, 'fire'], Slash: [1, 'fire'], Numpad0: [1, 'fire']
   };
   const keyState = {};
-  const touchIn = { left: false, right: false, thrust: false, fire: false };
+  const touchIn = [0, 1].map(() => ({ left: false, right: false, thrust: false, fire: false }));
   function readInput(i) {
     const o = { left: false, right: false, thrust: false, fire: false };
     for (const code in keyState) {
@@ -540,7 +592,7 @@
       const [pi, act] = KEYS[code];
       if ((numP === 1 ? 0 : pi) === i) o[act] = true;
     }
-    if (i === 0) for (const k in touchIn) o[k] = o[k] || touchIn[k];
+    for (const k in touchIn[i]) o[k] = o[k] || touchIn[i][k];
     return o;
   }
 
@@ -845,6 +897,15 @@
       ctx.font = '12px "Press Start 2P", ui-monospace, monospace'; ctx.fillStyle = DIM;
       ctx.fillText(touchEl.hidden ? 'Press P to resume' : 'Tap Resume to carry on', WW / 2, WH / 2 + 24);
     }
+    if (state !== 'play' && !touchEl.hidden && numP === 2) {
+      // Remind two players which side of the screen is theirs
+      ctx.font = '12px "Press Start 2P", ui-monospace, monospace';
+      ctx.textBaseline = 'bottom';
+      ctx.textAlign = 'left'; ctx.fillStyle = P_COLORS[0];
+      ctx.fillText('◀ P1 PAD', 18, WH - 16);
+      ctx.textAlign = 'right'; ctx.fillStyle = P_COLORS[1];
+      ctx.fillText('P2 PAD ▶', WW - 18, WH - 16);
+    }
   }
 
   // ---------- Loop ----------
@@ -864,7 +925,7 @@
     if (!p) initAudio();
     paused = p;
     for (const k in keyState) keyState[k] = false;
-    for (const k in touchIn) touchIn[k] = false;
+    clearTouch();
     if (thrustGain) thrustGain.gain.value = 0;
     document.getElementById('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
   }
@@ -893,25 +954,76 @@
   document.getElementById('again1').addEventListener('click', () => startGame(1));
   document.getElementById('again2').addEventListener('click', () => startGame(2));
 
-  // Touch controls drive player 1
-  function showTouch() { if (touchEl.hidden) { touchEl.hidden = false; resize(); } }
-  if (window.matchMedia && matchMedia('(pointer: coarse)').matches) showTouch();
-  window.addEventListener('touchstart', showTouch, { once: true, passive: true });
-  touchEl.querySelectorAll('button').forEach(btn => {
-    const k = btn.dataset.k;
+  // ---------- Touch pads ----------
+  // One player: turn on the left pad, thrust and fire on the right, so both thumbs share the work.
+  // Two players: each gets a full pad at their own end of the screen, laid out by layoutPads.
+  const LABELS = { left: '◀', right: '▶', thrust: '▲', fire: 'FIRE' };
+  const NAMES = { left: 'rotate left', right: 'rotate right', thrust: 'thrust', fire: 'fire' };
+  function clearTouch() {
+    for (const t of touchIn) for (const k in t) t[k] = false;
+    touchEl.querySelectorAll('button.on').forEach(b => b.classList.remove('on'));
+  }
+  function buildPads() {
+    clearTouch();
+    const layout = numP === 2
+      ? [[0, ['left', 'thrust', 'right', 'fire']], [1, ['left', 'thrust', 'right', 'fire']]]
+      : [[0, ['left', 'right']], [0, ['thrust', 'fire']]];
+    ['padL', 'padR'].forEach((id, side) => {
+      const pad = document.getElementById(id);
+      const [pi, keys] = layout[side];
+      pad.className = 'pad p' + (pi + 1) + (numP === 2 ? ' free' : '');
+      pad.replaceChildren(...keys.map(k => makePadButton(pi, k)));
+    });
+    stageEl.classList.toggle('two', numP === 2);
+    layoutPads();
+  }
+  function makePadButton(pi, k) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = k;
+    btn.dataset.k = k;
+    btn.dataset.p = pi;
+    const label = document.createElement('span');
+    label.textContent = LABELS[k];
+    btn.append(label);
+    btn.setAttribute('aria-label', `Player ${pi + 1} ${NAMES[k]}`);
     const down = e => {
       e.preventDefault(); initAudio();
       btn.classList.add('on');
       if (paused) return;
-      touchIn[k] = true;
+      touchIn[pi][k] = true;
       if (btn.setPointerCapture) try { btn.setPointerCapture(e.pointerId); } catch (_) {}
     };
-    const up = e => { e.preventDefault(); btn.classList.remove('on'); touchIn[k] = false; };
+    const up = e => { e.preventDefault(); btn.classList.remove('on'); touchIn[pi][k] = false; };
     btn.addEventListener('pointerdown', down);
     btn.addEventListener('pointerup', up);
     btn.addEventListener('pointercancel', up);
     btn.addEventListener('contextmenu', e => e.preventDefault());
-  });
+    return btn;
+  }
+  function showTouch() {
+    if (!touchEl.hidden) return;
+    isTouch = true;
+    touchEl.hidden = false;
+    stageEl.classList.add('touch');
+    buildPads();
+    applyOrientation();
+  }
+  const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  const mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  if (coarse || mobileUA) showTouch();
+  window.addEventListener('touchstart', showTouch, { once: true, passive: true });
+
+  // Where the browser allows it (mostly Android), go fullscreen and lock the screen to landscape.
+  // Elsewhere the rotated stage takes care of it.
+  function lockLandscape() {
+    if (!isTouch || document.fullscreenElement) return;
+    const el = document.documentElement;
+    if (!el.requestFullscreen) return;
+    el.requestFullscreen({ navigationUI: 'hide' })
+      .then(() => screen.orientation && screen.orientation.lock ? screen.orientation.lock('landscape') : null)
+      .catch(() => {});
+  }
 })();
 </script>
 </body>
