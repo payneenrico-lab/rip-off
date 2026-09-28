@@ -108,8 +108,8 @@
     display: grid; grid-template-columns: repeat(2, var(--btn, 60px)); gap: 8px;
   }
   .pad.p2 { --pc: 255, 179, 71; }
-  #padL { left: 12px; }
-  #padR { right: 12px; }
+  #padL { left: calc(12px + var(--inset, 0px)); }
+  #padR { right: calc(12px + var(--inset, 0px)); }
   .pad button {
     pointer-events: auto;
     width: var(--btn, 60px); height: var(--btn, 60px); border-radius: 50%;
@@ -237,29 +237,33 @@
     // With touch controls, keep a strip clear on each side of the arena for the pads
     let side = 0;
     if (!touchEl.hidden) {
-      side = Math.min(150, W * 0.2);
+      // Tablets can show a close "X" in the screen corners, so on screens that size the buttons
+      // sit about 1.5 cm (57 CSS px) in from the side edges
+      padInset = Math.min(W, H) >= 600 ? 57 : 0;
+      side = Math.min(150 + padInset, W * 0.26);
       // The two-player corner triangle is about 2.1 buttons wide
-      btnSize = clamp(Math.floor((side - 16) / 2.1), 44, 64);
+      btnSize = clamp(Math.floor((side - padInset - 16) / 2.1), 44, 64);
       stageEl.style.setProperty('--btn', btnSize + 'px');
       stageEl.style.setProperty('--side', Math.round(side) + 'px');
+      stageEl.style.setProperty('--inset', padInset + 'px');
     }
     sc = Math.min((W - side * 2) / WW, H / WH);
     ox = (W - WW * sc) / 2;
     oy = (H - WH * sc) / 2;
     layoutPads();
   }
-  let btnSize = 60;
+  let btnSize = 60, padInset = 0;
   // Two-player layout, in screen pixels. Player 1 sits at the left end looking right, so their left
   // hand is at the top: turn-left above turn-right, thrust between them pointing at the arena, and fire
   // in the bottom corner under their right hand. Player 2 gets the same layout turned 180 degrees.
   function layoutPads() {
     if (touchEl.hidden || numP !== 2) return;
-    const b = btnSize, m = 12, x0 = m + b / 2, y0 = m + b / 2;
+    const b = btnSize, m = 12, x0 = m + padInset + b / 2, y0 = m + b / 2;
     const spots = {
       left: [x0, y0],
       right: [x0, y0 + 1.25 * b],
       thrust: [x0 + 1.08 * b, y0 + 0.625 * b],
-      fire: [m + b * 0.6, H - m - b * 0.6]
+      fire: [m + padInset + b * 0.6, H - m - b * 0.6]
     };
     for (const btn of touchEl.querySelectorAll('.free button')) {
       let [x, y] = spots[btn.dataset.k];
@@ -374,7 +378,7 @@
   }
   function makePlayer(i) {
     const s = spawnPoint(i);
-    return { i, color: P_COLORS[i], x: s.x, y: s.y, a: s.a, vx: 0, vy: 0, alive: true, respawn: 0, inv: 2, cd: 0, score: 0, thrusting: false, firePrev: false };
+    return { i, color: P_COLORS[i], x: s.x, y: s.y, a: s.a, vx: 0, vy: 0, alive: true, respawn: 0, inv: 2, cd: 0, score: 0, thrusting: false, firePrev: false, turnDir: 0, turnT: 0 };
   }
   function respawnPlayer(p) {
     const s = spawnPoint(p.i);
@@ -607,8 +611,14 @@
     for (const p of players) {
       if (!p.alive) { p.respawn -= dt; if (p.respawn <= 0) respawnPlayer(p); continue; }
       const inp = readInput(p.i);
-      if (inp.left) p.a -= 3.5 * dt;
-      if (inp.right) p.a += 3.5 * dt;
+      // Turning starts slow and speeds up while held: a tap nudges a few degrees for fine aim,
+      // holding swings round at full speed within half a second
+      const turn = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+      if (turn !== p.turnDir) { p.turnDir = turn; p.turnT = 0; }
+      if (turn) {
+        p.turnT += dt;
+        p.a += turn * Math.min(3.4, 0.8 + p.turnT * 6) * dt;
+      }
       p.thrusting = inp.thrust;
       if (inp.thrust) { p.vx += Math.cos(p.a) * 430 * dt; p.vy += Math.sin(p.a) * 430 * dt; thrusters++; }
       const k = Math.exp(-1.5 * dt);
