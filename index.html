@@ -120,6 +120,7 @@
     touch-action: none; padding: 0;
   }
   .pad button.on { background: rgba(var(--pc), 0.38); }
+  .pad button.charging { opacity: 0.35; }
   .pad button span { display: inline-block; }
   /* Two players face each other from the short ends of the screen: buttons are placed one by one
      (see layoutPads), and each pad's labels are turned to read the right way up for its player */
@@ -174,12 +175,13 @@
         <span class="act">Rotate</span><span class="k">A D</span><span class="k">← →</span>
         <span class="act">Thrust</span><span class="k">W</span><span class="k">↑</span>
         <span class="act">Fire</span><span class="k">Space</span><span class="k">Enter</span>
+        <span class="act">Shield</span><span class="k">S</span><span class="k">↓</span>
       </div>
       <div class="btns">
         <button class="start one" id="start1" type="button">1 Player</button>
         <button class="start two" id="start2" type="button">2 Players</button>
       </div>
-      <p class="hint">Press 1 or 2 · P pause · M sound · Either key set works in a 1-player game</p>
+      <p class="hint">Press 1 or 2 · P pause · M sound · Shield lasts 1.5 s, recharges in 3 s · Either key set works in a 1-player game</p>
     </div>
   </div>
 
@@ -214,6 +216,7 @@
   const WW = 960, WH = 720;
   const P_COLORS = ['#3DF5FF', '#FFB347'];
   const FUEL = '#9BFF6A';
+  const SHIELD_R = 24;
   const INK = '#E6F1FF', DIM = '#7C8AA3';
 
   // Vector shapes, drawn pointing along +x. Each is a list of polylines.
@@ -275,7 +278,9 @@
       left: [x0, y0],
       right: [x0, y0 + 1.25 * b],
       thrust: [x0 + 1.08 * b, y0 + 0.625 * b],
-      fire: [m + padInset + b * 0.6, H - m - b * 0.6]
+      fire: [m + padInset + b * 0.6, H - m - b * 0.6],
+      // Just above fire on screen, which is on the player's left as they sit at their end
+      shield: [m + padInset + b * 0.6, H - m - b * 1.82]
     };
     for (const btn of touchEl.querySelectorAll('.free button')) {
       let [x, y] = spots[btn.dataset.k];
@@ -357,6 +362,9 @@
     drop: () => tone(600, 0.12, 'triangle', 0.1, 900),
     lost: () => { tone(520, 0.8, 'triangle', 0.14, 60); tone(260, 0.8, 'square', 0.04, 40); },
     towBlip: () => tone(310, 0.05, 'square', 0.025),
+    shieldUp: () => { tone(220, 0.3, 'sine', 0.14, 880); tone(440, 0.3, 'triangle', 0.05, 1320); },
+    shieldHit: () => tone(1500, 0.09, 'triangle', 0.09, 700),
+    shieldReady: () => tone(880, 0.06, 'sine', 0.05),
     wave: () => [392, 523, 659].forEach((f, i) => tone(f, 0.14, 'square', 0.05, null, i * 0.09))
   };
   function toggleMute() {
@@ -390,13 +398,13 @@
   }
   function makePlayer(i) {
     const s = spawnPoint(i);
-    return { i, color: P_COLORS[i], x: s.x, y: s.y, a: s.a, vx: 0, vy: 0, alive: true, respawn: 0, inv: 2, cd: 0, score: 0, thrusting: false, firePrev: false, turnDir: 0, turnT: 0 };
+    return { i, color: P_COLORS[i], x: s.x, y: s.y, a: s.a, vx: 0, vy: 0, alive: true, respawn: 0, inv: 2, cd: 0, score: 0, thrusting: false, firePrev: false, turnDir: 0, turnT: 0, shieldT: 0, shieldCd: 0, shieldPrev: false };
   }
   function respawnPlayer(p) {
     const s = spawnPoint(p.i);
     // Wait a moment if a bandit is sitting on the spawn point
     if (bandits.some(b => dist2(b, s) < 70 * 70)) { p.respawn = 0.4; return; }
-    Object.assign(p, { x: s.x, y: s.y, a: s.a, vx: 0, vy: 0, alive: true, inv: 2.2 });
+    Object.assign(p, { x: s.x, y: s.y, a: s.a, vx: 0, vy: 0, alive: true, inv: 2.2, shieldT: 0, shieldCd: 0 });
   }
 
   function edgeSpawn() {
@@ -596,13 +604,14 @@
   // ---------- Input ----------
   const KEYS = {
     KeyA: [0, 'left'], KeyD: [0, 'right'], KeyW: [0, 'thrust'], Space: [0, 'fire'], KeyF: [0, 'fire'],
+    KeyS: [0, 'shield'], ArrowDown: [1, 'shield'],
     ArrowLeft: [1, 'left'], ArrowRight: [1, 'right'], ArrowUp: [1, 'thrust'],
     Enter: [1, 'fire'], NumpadEnter: [1, 'fire'], ControlRight: [1, 'fire'], Slash: [1, 'fire'], Numpad0: [1, 'fire']
   };
   const keyState = {};
-  const touchIn = [0, 1].map(() => ({ left: false, right: false, thrust: false, fire: false }));
+  const touchIn = [0, 1].map(() => ({ left: false, right: false, thrust: false, fire: false, shield: false }));
   function readInput(i) {
-    const o = { left: false, right: false, thrust: false, fire: false };
+    const o = { left: false, right: false, thrust: false, fire: false, shield: false };
     for (const code in keyState) {
       if (!keyState[code]) continue;
       const [pi, act] = KEYS[code];
@@ -655,6 +664,17 @@
         }
       }
       p.firePrev = inp.fire;
+
+      // Shield: a fresh press raises it for 1.5 s, then it takes 3 s to recharge
+      if (inp.shield && !p.shieldPrev && p.shieldT <= 0 && p.shieldCd <= 0) { p.shieldT = 1.5; sfx.shieldUp(); }
+      p.shieldPrev = inp.shield;
+      if (p.shieldT > 0) {
+        p.shieldT -= dt;
+        if (p.shieldT <= 0) { p.shieldT = 0; p.shieldCd = 3; }
+      } else if (p.shieldCd > 0) {
+        p.shieldCd -= dt;
+        if (p.shieldCd <= 0) { p.shieldCd = 0; sfx.shieldReady(); }
+      }
     }
     if (players.length === 2 && players[0].alive && players[1].alive) {
       const [a, b] = players, d = Math.sqrt(dist2(a, b));
@@ -707,16 +727,39 @@
         }
       } else {
         for (const p of players) {
-          if (!p.alive || p.inv > 0) continue;
+          if (!p.alive) continue;
+          if (p.shieldT > 0 && dist2(bl, p) < SHIELD_R * SHIELD_R) {
+            // Shot breaks on the shield
+            bl.life = 0;
+            for (let i = 0; i < 6; i++) {
+              const ang = rand(0, TAU), sp = rand(40, 140), life = rand(0.15, 0.35);
+              sparks.push({ x: bl.x, y: bl.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life, max: life, color: p.color });
+            }
+            sfx.shieldHit();
+            break;
+          }
+          if (p.inv > 0) continue;
           if (dist2(bl, p) < 12 * 12) { killPlayer(p); bl.life = 0; break; }
         }
       }
     }
-    // Ramming: tank and bandit both go up
+    // Ramming: tank and bandit both go up, unless the shield is up, in which case the bandit bounces off
     for (const p of players) {
-      if (!p.alive || p.inv > 0) continue;
+      if (!p.alive) continue;
       for (const b of bandits) {
         if (b.dead) continue;
+        if (p.shieldT > 0) {
+          const reach = SHIELD_R + b.r, d = Math.sqrt(dist2(p, b));
+          if (d < reach && d > 0.01) {
+            const nx = (b.x - p.x) / d, ny = (b.y - p.y) / d, push = reach - d;
+            b.x += nx * push * 0.7; b.y += ny * push * 0.7;
+            p.x -= nx * push * 0.3; p.y -= ny * push * 0.3;
+            const rel = p.vx * nx + p.vy * ny;
+            if (rel > 0) { p.vx -= rel * nx * 1.5; p.vy -= rel * ny * 1.5; }
+          }
+          continue;
+        }
+        if (p.inv > 0) continue;
         if (dist2(p, b) < (11 + b.r) ** 2) { killBandit(b, p.i); killPlayer(p); break; }
       }
     }
@@ -828,6 +871,13 @@
 
     for (const p of players) {
       if (!p.alive) continue;
+      if (p.shieldT > 0) {
+        // Flickers in the last 0.4 s as a warning it's about to drop
+        const fading = p.shieldT < 0.4 && Math.floor(t * 16) % 2;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, SHIELD_R, 0, TAU);
+        glowStroke(p.color, fading ? 0.25 : 0.7 + 0.3 * Math.sin(t * 18));
+      }
       if (p.inv > 0 && Math.floor(t * 10) % 2) continue;
       drawShape(PLAYER_SHAPE, p.x, p.y, p.a, p.color);
       if (p.thrusting) {
@@ -882,6 +932,20 @@
     }
     ctx.textAlign = 'center'; ctx.fillStyle = DIM;
     ctx.fillText('HI ' + pad(hi, 6), WW / 2, 16);
+
+    // Shield charge bar under each score: drains while the shield is up, refills while recharging
+    for (const p of players) {
+      const x = p.i ? WW - 18 - 96 : 18, y = 40;
+      const full = p.shieldT > 0 ? p.shieldT / 1.5 : 1 - p.shieldCd / 3;
+      const ready = p.shieldT <= 0 && p.shieldCd <= 0;
+      ctx.globalAlpha = 0.25; ctx.fillStyle = p.color;
+      ctx.fillRect(x, y, 96, 5);
+      ctx.globalAlpha = ready || p.shieldT > 0 ? 1 : 0.55;
+      ctx.fillRect(p.i ? x + 96 * (1 - full) : x, y, 96 * full, 5);
+      ctx.globalAlpha = 1;
+      const btn = shieldBtns[p.i];
+      if (btn && btn.classList.contains('charging') === ready) btn.classList.toggle('charging', !ready);
+    }
 
     if (state === 'play') {
       ctx.font = '12px "Press Start 2P", ui-monospace, monospace';
@@ -979,23 +1043,27 @@
   // ---------- Touch pads ----------
   // One player: turn on the left pad, thrust and fire on the right, so both thumbs share the work.
   // Two players: each gets a full pad at their own end of the screen, laid out by layoutPads.
-  const LABELS = { left: '◀', right: '▶', thrust: '▲', fire: 'FIRE' };
-  const NAMES = { left: 'rotate left', right: 'rotate right', thrust: 'thrust', fire: 'fire' };
+  const LABELS = { left: '◀', right: '▶', thrust: '▲', fire: 'FIRE', shield: 'SHD' };
+  const NAMES = { left: 'rotate left', right: 'rotate right', thrust: 'thrust', fire: 'fire', shield: 'shield' };
+  let shieldBtns = [];
   function clearTouch() {
     for (const t of touchIn) for (const k in t) t[k] = false;
     touchEl.querySelectorAll('button.on').forEach(b => b.classList.remove('on'));
   }
   function buildPads() {
     clearTouch();
+    // One player: shield sits above fire (the empty slot keeps the 2-column grid in place)
     const layout = numP === 2
-      ? [[0, ['left', 'thrust', 'right', 'fire']], [1, ['left', 'thrust', 'right', 'fire']]]
-      : [[0, ['left', 'right']], [0, ['thrust', 'fire']]];
+      ? [[0, ['left', 'thrust', 'right', 'fire', 'shield']], [1, ['left', 'thrust', 'right', 'fire', 'shield']]]
+      : [[0, ['left', 'right']], [0, [null, 'shield', 'thrust', 'fire']]];
+    shieldBtns = [];
     ['padL', 'padR'].forEach((id, side) => {
       const pad = document.getElementById(id);
       const [pi, keys] = layout[side];
       pad.className = 'pad p' + (pi + 1) + (numP === 2 ? ' free' : '');
-      pad.replaceChildren(...keys.map(k => makePadButton(pi, k)));
-    });    layoutPads();
+      pad.replaceChildren(...keys.map(k => k ? makePadButton(pi, k) : document.createElement('span')));
+    });
+    layoutPads();
   }
   function makePadButton(pi, k) {
     const btn = document.createElement('button');
@@ -1007,6 +1075,7 @@
     label.textContent = LABELS[k];
     btn.append(label);
     btn.setAttribute('aria-label', `Player ${pi + 1} ${NAMES[k]}`);
+    if (k === 'shield') shieldBtns[pi] = btn;
     const down = e => {
       e.preventDefault(); initAudio();
       btn.classList.add('on');
