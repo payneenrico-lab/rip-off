@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#020406">
+<style>
+  html, body { margin: 0; overscroll-behavior: none; }
+  [hidden] { display: none !important; }
+</style>
+<title>Rip Off</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --space: #020406;
+    --ink: #e6f1ff;
+    --dim: #7c8aa3;
+    --p1: #3df5ff;
+    --p2: #ffb347;
+    --bandit: #ff4f6d;
+    --fuel: #9bff6a;
+    --panel: rgba(4, 8, 14, 0.88);
+    --line: rgba(61, 245, 255, 0.35);
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--space);
+    color: var(--ink);
+    overflow: hidden;
+    font-family: "Space Mono", ui-monospace, Menlo, Consolas, monospace;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #stage { position: relative; height: 100%; width: 100%; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .panel {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding-inline: 16px;
+    pointer-events: none;
+  }
+  .card {
+    pointer-events: auto;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: 0 0 40px rgba(61, 245, 255, 0.12);
+    padding: 26px 26px 22px;
+    max-width: 480px; width: 100%;
+    box-sizing: border-box;
+    display: grid; gap: 16px;
+    text-align: center;
+  }
+  h1 {
+    margin: 0;
+    font-family: "Press Start 2P", ui-monospace, monospace;
+    font-size: clamp(22px, 7vw, 40px);
+    line-height: 1.3;
+    letter-spacing: 0.06em;
+    text-wrap: balance;
+    color: var(--ink);
+    text-shadow: 0 0 14px rgba(230, 241, 255, 0.55);
+  }
+  h1.lost { color: var(--bandit); text-shadow: 0 0 14px rgba(255, 79, 109, 0.6); font-size: clamp(18px, 5.5vw, 30px); }
+  .sub { margin: 0; color: var(--dim); font-size: 13px; line-height: 1.55; }
+  .sub b { color: var(--fuel); font-weight: 700; }
+  .sub i { color: var(--bandit); font-style: normal; font-weight: 700; }
+  .keys {
+    display: grid; grid-template-columns: auto auto auto; gap: 6px 18px;
+    justify-content: center; text-align: left; font-size: 13px; margin: 0 auto;
+  }
+  .keys .h { font-family: "Press Start 2P", ui-monospace, monospace; font-size: 9px; letter-spacing: 0.08em; padding-bottom: 2px; }
+  .keys .h1 { color: var(--p1); }
+  .keys .h2 { color: var(--p2); }
+  .keys .act { color: var(--dim); }
+  .keys .k { color: var(--ink); font-weight: 700; white-space: nowrap; }
+  .big {
+    font-family: "Press Start 2P", ui-monospace, monospace;
+    font-size: 13px; color: var(--ink); margin: 0; line-height: 1.8;
+    font-variant-numeric: tabular-nums;
+  }
+  .big .c1 { color: var(--p1); }
+  .big .c2 { color: var(--p2); }
+  .btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  button.start {
+    font-family: "Press Start 2P", ui-monospace, monospace;
+    font-size: 12px;
+    border: 0; padding: 14px 16px; cursor: pointer;
+  }
+  button.one { background: var(--p1); color: #031216; box-shadow: 0 0 18px rgba(61, 245, 255, 0.5); }
+  button.two { background: var(--p2); color: #1c1003; box-shadow: 0 0 18px rgba(255, 179, 71, 0.45); }
+  button.start:hover { filter: brightness(1.12); }
+  button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .hint { font-size: 11px; color: var(--dim); margin: 0; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  #touch {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    pointer-events: none;
+  }
+  #touch .grp { display: flex; gap: 10px; }
+  #touch button {
+    pointer-events: auto;
+    width: 64px; height: 64px; border-radius: 50%;
+    background: rgba(61, 245, 255, 0.1);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-family: "Press Start 2P", ui-monospace, monospace; font-size: 10px;
+    touch-action: none;
+  }
+  #touch button.on { background: rgba(61, 245, 255, 0.35); }
+  #touch button[data-k="fire"] { width: 76px; height: 76px; }
+  @media (max-width: 480px) {
+    #touch .grp { gap: 6px; }
+    #touch button { width: 56px; height: 56px; font-size: 8px; }
+    #touch button[data-k="fire"] { width: 66px; height: 66px; }
+  }
+  #corner {
+    position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); right: 16px;
+    display: flex; gap: 8px; z-index: 2;
+  }
+  #corner button {
+    background: transparent; border: 1px solid var(--line); color: var(--dim);
+    font-family: "Space Mono", ui-monospace, monospace; font-size: 11px;
+    padding: 4px 8px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="game" aria-label="Rip Off game"></canvas>
+  <div id="corner">
+    <button id="pauseBtn" type="button" hidden>Pause</button>
+    <button id="mute" type="button">Sound: on</button>
+  </div>
+
+  <div class="panel" id="titlePanel">
+    <div class="card">
+      <h1>RIP OFF</h1>
+      <p class="sub">Bandit tanks are after your <b>fuel canisters</b>. Shoot them before they <i>tow the fuel off the screen</i>. There are no lives: the game ends when the last canister is gone.</p>
+      <div class="keys">
+        <span></span><span class="h h1">PLAYER 1</span><span class="h h2">PLAYER 2</span>
+        <span class="act">Rotate</span><span class="k">A D</span><span class="k">← →</span>
+        <span class="act">Thrust</span><span class="k">W</span><span class="k">↑</span>
+        <span class="act">Fire</span><span class="k">Space</span><span class="k">Enter</span>
+      </div>
+      <div class="btns">
+        <button class="start one" id="start1" type="button">1 Player</button>
+        <button class="start two" id="start2" type="button">2 Players</button>
+      </div>
+      <p class="hint">Press 1 or 2 · P pause · M sound · Either key set works in a 1-player game</p>
+    </div>
+  </div>
+
+  <div class="panel" id="overPanel" hidden>
+    <div class="card">
+      <h1 class="lost">ALL FUEL LOST</h1>
+      <p class="big" id="finalScore"></p>
+      <p class="sub" id="finalHi">Best 0</p>
+      <div class="btns">
+        <button class="start one" id="again1" type="button">1 Player</button>
+        <button class="start two" id="again2" type="button">2 Players</button>
+      </div>
+      <p class="hint">Press 1 or 2</p>
+    </div>
+  </div>
+
+  <div id="touch" hidden>
+    <div class="grp">
+      <button type="button" data-k="left" aria-label="Rotate left">◀</button>
+      <button type="button" data-k="right" aria-label="Rotate right">▶</button>
+    </div>
+    <div class="grp">
+      <button type="button" data-k="thrust" aria-label="Thrust">▲</button>
+      <button type="button" data-k="fire" aria-label="Fire">FIRE</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const TAU = Math.PI * 2;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  const angDiff = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
+  const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+
+  // The arena is a fixed 960 x 720 field, scaled to fit the window
+  const WW = 960, WH = 720;
+  const P_COLORS = ['#3DF5FF', '#FFB347'];
+  const FUEL = '#9BFF6A';
+  const INK = '#E6F1FF', DIM = '#7C8AA3';
+
+  // Vector shapes, drawn pointing along +x. Each is a list of polylines.
+  const PLAYER_SHAPE = [
+    [[17, 0], [-10, -11], [-5, 0], [-10, 11], [17, 0]],
+    [[-5, 0], [6, 0]]
+  ];
+  const CAN_SHAPE = [
+    [[0, -9], [8, -4.5], [8, 4.5], [0, 9], [-8, 4.5], [-8, -4.5], [0, -9]],
+    [[-3.5, -2], [3.5, -2]], [[-3.5, 2], [3.5, 2]]
+  ];
+  // One bandit design per wave, cycling
+  const BANDITS = [
+    { color: '#FF4F6D', shape: [[[14, 0], [0, -9], [-12, 0], [0, 9], [14, 0]], [[-12, 0], [-19, 0]]] },
+    { color: '#FF7A45', shape: [[[12, -4], [12, 4], [-10, 11], [-10, -11], [12, -4]], [[-1, -8], [-1, 8]]] },
+    { color: '#D77BFF', shape: [[[13, -10], [-13, 10], [-13, -10], [13, 10], [13, -10]]] },
+    { color: '#FF4FB8', shape: [[[15, -8], [4, -3], [4, 3], [15, 8]], [[4, -3], [-10, -11], [-6, 0], [-10, 11], [4, 3]]] },
+    { color: '#FFD23F', shape: [[[15, 0], [-4, -12], [-11, -6], [-4, 0], [-11, 6], [-4, 12], [15, 0]]] },
+    { color: '#6AA8FF', shape: [[[13, 0], [5, -8], [-8, -8], [-13, 0], [-8, 8], [5, 8], [13, 0]], [[-13, 0], [13, 0]]] }
+  ];
+
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const touchEl = document.getElementById('touch');
+  let W = 0, H = 0, dpr = 1, sc = 1, ox = 0, oy = 0;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    sc = Math.min(W / WW, H / WH);
+    ox = (W - WW * sc) / 2;
+    oy = (H - WH * sc) / 2;
+    // In portrait with touch controls, lift the arena so the buttons sit below it
+    const spare = H - WH * sc;
+    if (!touchEl.hidden && spare > 180) oy = Math.max(8, (spare - 150) / 2);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const stars = Array.from({ length: 90 }, () => ({
+    x: Math.random() * WW, y: Math.random() * WH, s: Math.random() * 1.2 + 0.4, p: Math.random() * TAU
+  }));
+
+  // ---------- Audio ----------
+  let ac = null, master = null, thrustGain = null, noiseBuf = null, muted = false;
+  function initAudio() {
+    if (ac && ac.state === 'closed') ac = null;
+    if (ac) {
+      // Phones suspend audio when you leave the page; it can only restart from a tap or key press
+      if (ac.state !== 'running') ac.resume().catch(() => {});
+      return;
+    }
+    try {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      master = ac.createGain(); master.gain.value = muted ? 0 : 0.35;
+      const comp = ac.createDynamicsCompressor();
+      comp.threshold.value = -12; comp.ratio.value = 4;
+      master.connect(comp).connect(ac.destination);
+      noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      // Engine rumble: looping noise, volume follows how many tanks are thrusting
+      const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+      const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 300;
+      thrustGain = ac.createGain(); thrustGain.gain.value = 0;
+      src.connect(f).connect(thrustGain).connect(master); src.start();
+    } catch (e) { ac = null; }
+  }
+  function tone(freq, dur, type, vol, slideTo, delay) {
+    if (!ac) return;
+    const t = ac.currentTime + (delay || 0), o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noiseBurst(dur, f0, f1, vol) {
+    if (!ac) return;
+    const t = ac.currentTime;
+    const s = ac.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+    const f = ac.createBiquadFilter(); f.type = 'lowpass';
+    f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f).connect(g).connect(master);
+    s.start(t, Math.random() * 0.9); s.stop(t + dur + 0.02);
+  }
+  const sfx = {
+    fire: () => tone(1250, 0.07, 'square', 0.07, 520),
+    enemyFire: () => tone(440, 0.15, 'sawtooth', 0.06, 150),
+    boom: big => { noiseBurst(big ? 0.9 : 0.5, 2400, 60, big ? 0.9 : 0.6); tone(big ? 130 : 170, big ? 0.6 : 0.35, 'sine', 0.5, 35); },
+    grab: () => { tone(760, 0.07, 'square', 0.06); tone(1010, 0.09, 'square', 0.06, null, 0.09); },
+    drop: () => tone(600, 0.12, 'triangle', 0.1, 900),
+    lost: () => { tone(520, 0.8, 'triangle', 0.14, 60); tone(260, 0.8, 'square', 0.04, 40); },
+    towBlip: () => tone(310, 0.05, 'square', 0.025),
+    wave: () => [392, 523, 659].forEach((f, i) => tone(f, 0.14, 'square', 0.05, null, i * 0.09))
+  };
+  function toggleMute() {
+    muted = !muted;
+    if (master) master.gain.value = muted ? 0 : 0.35;
+    document.getElementById('mute').textContent = muted ? 'Sound: off' : 'Sound: on';
+  }
+  document.getElementById('mute').addEventListener('click', e => { initAudio(); toggleMute(); e.currentTarget.blur(); });
+
+  // ---------- State ----------
+  let state = 'title';         // title | play | over
+  let numP = 1, paused = false;
+  let players = [], bandits = [], queue = [], cans = [], bullets = [], shards = [], sparks = [];
+  let wave = 0, betweenWaves = true, waveGap = 0, banner = null, shake = 0, overLock = 0, towBlipT = 0;
+  let lastScores = [0, 0];
+  let hi = 0;
+  try { hi = parseInt(localStorage.getItem('rip-off-hi') || '0', 10) || 0; } catch (e) {}
+  function saveHi() { try { localStorage.setItem('rip-off-hi', String(hi)); } catch (e) {} }
+
+  // Eight canisters in a 3x3 block with the middle empty
+  function resetCans() {
+    cans = [];
+    for (let gy = -1; gy <= 1; gy++) for (let gx = -1; gx <= 1; gx++) {
+      if (gx || gy) cans.push({ x: WW / 2 + gx * 30, y: WH / 2 + gy * 30, carrier: null });
+    }
+  }
+
+  function spawnPoint(i) {
+    if (numP === 1) return { x: WW / 2, y: WH / 2 + 110, a: -Math.PI / 2 };
+    return { x: WW / 2 + (i ? 110 : -110), y: WH / 2, a: -Math.PI / 2 };
+  }
+  function makePlayer(i) {
+    const s = spawnPoint(i);
+    return { i, color: P_COLORS[i], x: s.x, y: s.y, a: s.a, vx: 0, vy: 0, alive: true, respawn: 0, inv: 2, cd: 0, score: 0, thrusting: false, firePrev: false };
+  }
+  function respawnPlayer(p) {
+    const s = spawnPoint(p.i);
+    // Wait a moment if a bandit is sitting on the spawn point
+    if (bandits.some(b => dist2(b, s) < 70 * 70)) { p.respawn = 0.4; return; }
+    Object.assign(p, { x: s.x, y: s.y, a: s.a, vx: 0, vy: 0, alive: true, inv: 2.2 });
+  }
+
+  function edgeSpawn() {
+    const side = (Math.random() * 4) | 0, t = rand(0.12, 0.88);
+    if (side === 0) return { x: t * WW, y: -30, a: Math.PI / 2 };
+    if (side === 1) return { x: WW + 30, y: t * WH, a: Math.PI };
+    if (side === 2) return { x: t * WW, y: WH + 30, a: -Math.PI / 2 };
+    return { x: -30, y: t * WH, a: 0 };
+  }
+
+  function spawnWave(n, attract) {
+    const tier = Math.floor((n - 1) / 4);
+    const design = BANDITS[(n - 1) % BANDITS.length];
+    const count = Math.min(2 + Math.floor((n - 1) / 2) + (numP === 2 && !attract ? 1 : 0), 8);
+    const hunters = n >= 3 ? Math.max(1, Math.floor(count * (n >= 8 ? 0.5 : 0.34))) : 0;
+    const spd = Math.min(62 + n * 5, 150);
+    const turn = Math.min(1.7 + n * 0.08, 3.2);
+    const aggro = Math.max(0.45, 1 - n * 0.04);
+    // Bandits arrive in pairs or threes from the same stretch of edge
+    let entry = edgeSpawn();
+    for (let i = 0; i < count; i++) {
+      if (i && i % 3 === 0) entry = edgeSpawn();
+      const along = rand(-90, 90);
+      const horizontalEdge = entry.y < 0 || entry.y > WH;
+      const x = horizontalEdge ? clamp(entry.x + along, 40, WW - 40) : entry.x;
+      const y = horizontalEdge ? entry.y : clamp(entry.y + along, 40, WH - 40);
+      queue.push({
+        t: i * 0.45 + (i % 3 === 0 && i ? 1.2 : 0),
+        b: {
+          x, y, a: entry.a, spd: spd * rand(0.92, 1.08), turn, aggro,
+          shape: design.shape, color: design.color, value: 10 * (tier + 1),
+          mode: i < hunters ? 'hunt' : 'seek', huntT: rand(6, 10),
+          target: null, tow: null, exit: null, entered: false, leaving: false,
+          fireCd: rand(1.2, 2.6), r: 13, dead: false
+        }
+      });
+    }
+  }
+
+  function startGame(n) {
+    numP = n;
+    state = 'play';
+    paused = false;
+    document.getElementById('titlePanel').hidden = true;
+    document.getElementById('overPanel').hidden = true;
+    document.getElementById('pauseBtn').hidden = false;
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    bandits = []; queue = []; bullets = [];
+    resetCans();
+    players = [];
+    for (let i = 0; i < n; i++) players.push(makePlayer(i));
+    wave = 0; betweenWaves = true; waveGap = 1.0; banner = null;
+    initAudio();
+  }
+
+  function gameOver() {
+    state = 'over';
+    overLock = 1.2;
+    lastScores = players.map(p => p.score);
+    const best = Math.max(...lastScores);
+    if (best > hi) { hi = best; saveHi(); }
+    const fmt = v => v.toLocaleString('en-US');
+    document.getElementById('finalScore').innerHTML =
+      `Wave ${wave}<br>` + players.map(p => `<span class="c${p.i + 1}">P${p.i + 1} ${fmt(p.score)}</span>`).join(' &nbsp; ');
+    document.getElementById('finalHi').textContent = best >= hi && best > 0 ? `New best: ${fmt(hi)}` : `Best ${fmt(hi)}`;
+    document.getElementById('pauseBtn').hidden = true;
+    setTimeout(() => { if (state === 'over') document.getElementById('overPanel').hidden = false; }, 1200);
+    for (const p of players) if (p.alive) explodeShape(PLAYER_SHAPE, p.x, p.y, p.a, p.color);
+    players = [];
+    if (thrustGain) thrustGain.gain.value = 0;
+  }
+
+  // ---------- Effects ----------
+  function explodeShape(shape, x, y, a, color) {
+    const c = Math.cos(a), s = Math.sin(a);
+    for (const poly of shape) for (let k = 0; k < poly.length - 1; k++) {
+      const [x1, y1] = poly[k], [x2, y2] = poly[k + 1];
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      const hx = (x2 - x1) / 2, hy = (y2 - y1) / 2;
+      const wx = mx * c - my * s, wy = mx * s + my * c;
+      const life = rand(0.8, 1.4);
+      shards.push({
+        x: x + wx, y: y + wy, hx: hx * c - hy * s, hy: hx * s + hy * c, rot: 0, spin: rand(-7, 7),
+        vx: wx * rand(4, 9) + rand(-40, 40), vy: wy * rand(4, 9) + rand(-40, 40), life, max: life, color
+      });
+    }
+    for (let i = 0; i < 16; i++) {
+      const ang = rand(0, TAU), sp = rand(40, 220), life = rand(0.3, 0.8);
+      sparks.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life, max: life, color });
+    }
+  }
+
+  function killBandit(b, by) {
+    if (b.dead) return;
+    b.dead = true;
+    if (b.tow) {
+      b.tow.carrier = null;
+      b.tow.x = clamp(b.tow.x, 14, WW - 14); b.tow.y = clamp(b.tow.y, 14, WH - 14);
+      sfx.drop();
+    }
+    if (by != null && players[by]) players[by].score += b.value;
+    explodeShape(b.shape, b.x, b.y, b.a, b.color);
+    sfx.boom(false);
+    shake = Math.max(shake, 5);
+  }
+  function killPlayer(p) {
+    p.alive = false; p.respawn = 2.5; p.thrusting = false;
+    explodeShape(PLAYER_SHAPE, p.x, p.y, p.a, p.color);
+    sfx.boom(true);
+    shake = Math.max(shake, 12);
+  }
+
+  // ---------- Bandit brains ----------
+  function nearestPlayer(b) {
+    let best = null, bd = Infinity;
+    for (const p of players) if (p.alive) { const d = dist2(b, p); if (d < bd) { bd = d; best = p; } }
+    return best;
+  }
+  function pickCan(b) {
+    let best = null, bd = Infinity;
+    for (const c of cans) {
+      if (c.carrier) continue;
+      let d = dist2(b, c);
+      // Spread out: a canister another bandit is already heading for looks further away
+      if (bandits.some(o => o !== b && !o.dead && o.target === c)) d *= 4;
+      if (d < bd) { bd = d; best = c; }
+    }
+    return best;
+  }
+  function nearestExit(b) {
+    const opts = [
+      { d: b.x, x: -60, y: b.y }, { d: WW - b.x, x: WW + 60, y: b.y },
+      { d: b.y, x: b.x, y: -60 }, { d: WH - b.y, x: b.x, y: WH + 60 }
+    ];
+    return opts.reduce((m, o) => o.d < m.d ? o : m);
+  }
+
+  function updateBandit(b, dt) {
+    let tx = b.x + Math.cos(b.a) * 50, ty = b.y + Math.sin(b.a) * 50, spd = b.spd;
+    if (!b.entered && b.x > 15 && b.x < WW - 15 && b.y > 15 && b.y < WH - 15) b.entered = true;
+
+    if (b.tow || b.leaving) {
+      if (!b.exit) b.exit = nearestExit(b);
+      tx = b.exit.x; ty = b.exit.y;
+      if (b.tow) spd *= 0.85;
+    } else {
+      if (b.mode === 'hunt') {
+        b.huntT -= dt;
+        const p = nearestPlayer(b);
+        if (!p || b.huntT <= 0) b.mode = 'seek';
+        else { tx = p.x; ty = p.y; }
+      }
+      if (b.mode === 'seek') {
+        if (!b.target || b.target.carrier || !cans.includes(b.target)) b.target = pickCan(b);
+        if (b.target) {
+          tx = b.target.x; ty = b.target.y;
+          if (dist2(b, b.target) < 20 * 20) {
+            b.tow = b.target; b.target.carrier = b; b.target = null;
+            b.exit = nearestExit(b);
+            sfx.grab();
+          }
+        } else {
+          // Nothing left to steal: go after a player, or leave
+          const p = nearestPlayer(b);
+          if (p) { tx = p.x; ty = p.y; } else b.leaving = true;
+        }
+      }
+    }
+
+    const want = Math.atan2(ty - b.y, tx - b.x);
+    const d = angDiff(want, b.a);
+    b.a += clamp(d, -b.turn * dt, b.turn * dt);
+    const f = Math.max(0.3, Math.cos(d));
+    b.x += Math.cos(b.a) * spd * f * dt;
+    b.y += Math.sin(b.a) * spd * f * dt;
+
+    // Fire at a player lined up in front
+    b.fireCd -= dt;
+    if (b.fireCd <= 0 && b.entered) {
+      const cone = b.mode === 'hunt' ? 0.24 : 0.14;
+      for (const p of players) {
+        if (!p.alive) continue;
+        const dd = dist2(b, p);
+        if (dd > 340 * 340) continue;
+        if (Math.abs(angDiff(Math.atan2(p.y - b.y, p.x - b.x), b.a)) < cone) {
+          bullets.push({ x: b.x + Math.cos(b.a) * 15, y: b.y + Math.sin(b.a) * 15, vx: Math.cos(b.a) * 300, vy: Math.sin(b.a) * 300, life: 1.25, owner: -1, color: b.color });
+          b.fireCd = rand(1.4, 2.6) * b.aggro;
+          sfx.enemyFire();
+          break;
+        }
+      }
+    }
+  }
+
+  // ---------- Input ----------
+  const KEYS = {
+    KeyA: [0, 'left'], KeyD: [0, 'right'], KeyW: [0, 'thrust'], Space: [0, 'fire'], KeyF: [0, 'fire'],
+    ArrowLeft: [1, 'left'], ArrowRight: [1, 'right'], ArrowUp: [1, 'thrust'],
+    Enter: [1, 'fire'], NumpadEnter: [1, 'fire'], ControlRight: [1, 'fire'], Slash: [1, 'fire'], Numpad0: [1, 'fire']
+  };
+  const keyState = {};
+  const touchIn = { left: false, right: false, thrust: false, fire: false };
+  function readInput(i) {
+    const o = { left: false, right: false, thrust: false, fire: false };
+    for (const code in keyState) {
+      if (!keyState[code]) continue;
+      const [pi, act] = KEYS[code];
+      if ((numP === 1 ? 0 : pi) === i) o[act] = true;
+    }
+    if (i === 0) for (const k in touchIn) o[k] = o[k] || touchIn[k];
+    return o;
+  }
+
+  // ---------- Update ----------
+  function update(dt) {
+    if (overLock > 0) overLock -= dt;
+    shake = Math.max(0, shake - dt * 30);
+    if (banner) { banner.t -= dt; if (banner.t <= 0) banner = null; }
+
+    // Players
+    let thrusters = 0;
+    for (const p of players) {
+      if (!p.alive) { p.respawn -= dt; if (p.respawn <= 0) respawnPlayer(p); continue; }
+      const inp = readInput(p.i);
+      if (inp.left) p.a -= 3.5 * dt;
+      if (inp.right) p.a += 3.5 * dt;
+      p.thrusting = inp.thrust;
+      if (inp.thrust) { p.vx += Math.cos(p.a) * 430 * dt; p.vy += Math.sin(p.a) * 430 * dt; thrusters++; }
+      const k = Math.exp(-1.5 * dt);
+      p.vx *= k; p.vy *= k;
+      const sp = Math.hypot(p.vx, p.vy);
+      if (sp > 280) { p.vx *= 280 / sp; p.vy *= 280 / sp; }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      // The arena walls are solid for players
+      if (p.x < 14) { p.x = 14; p.vx = Math.abs(p.vx) * 0.4; }
+      if (p.x > WW - 14) { p.x = WW - 14; p.vx = -Math.abs(p.vx) * 0.4; }
+      if (p.y < 14) { p.y = 14; p.vy = Math.abs(p.vy) * 0.4; }
+      if (p.y > WH - 14) { p.y = WH - 14; p.vy = -Math.abs(p.vy) * 0.4; }
+      p.inv -= dt; p.cd -= dt;
+      // Hold to auto-fire; a fresh press fires straight away
+      const fresh = inp.fire && !p.firePrev;
+      if (inp.fire && (p.cd <= 0 || fresh && p.cd < 0.12)) {
+        const mine = bullets.filter(b => b.owner === p.i).length;
+        if (mine < 4) {
+          bullets.push({ x: p.x + Math.cos(p.a) * 17, y: p.y + Math.sin(p.a) * 17, vx: Math.cos(p.a) * 560 + p.vx * 0.5, vy: Math.sin(p.a) * 560 + p.vy * 0.5, life: 0.62, owner: p.i, color: p.color });
+          p.cd = 0.24;
+          sfx.fire();
+        }
+      }
+      p.firePrev = inp.fire;
+    }
+    if (players.length === 2 && players[0].alive && players[1].alive) {
+      const [a, b] = players, d = Math.sqrt(dist2(a, b));
+      if (d < 26 && d > 0.01) {
+        const nx = (b.x - a.x) / d, ny = (b.y - a.y) / d, push = (26 - d) / 2;
+        a.x -= nx * push; a.y -= ny * push; b.x += nx * push; b.y += ny * push;
+        const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+        if (rel < 0) { a.vx += rel * nx; a.vy += rel * ny; b.vx -= rel * nx; b.vy -= rel * ny; }
+      }
+    }
+    if (thrustGain && ac) thrustGain.gain.setTargetAtTime(paused ? 0 : Math.min(thrusters, 2) * 0.16, ac.currentTime, 0.04);
+
+    // Bandits arriving
+    for (const q of queue) q.t -= dt;
+    queue.sort((a, b) => a.t - b.t);
+    while (queue.length && queue[0].t <= 0) bandits.push(queue.shift().b);
+
+    for (const b of bandits) updateBandit(b, dt);
+    // Keep bandits from stacking on top of each other
+    for (let i = 0; i < bandits.length; i++) for (let j = i + 1; j < bandits.length; j++) {
+      const a = bandits[i], b = bandits[j], d = Math.sqrt(dist2(a, b));
+      if (d < 28 && d > 0.01) {
+        const push = (28 - d) / 2, nx = (b.x - a.x) / d, ny = (b.y - a.y) / d;
+        a.x -= nx * push; a.y -= ny * push; b.x += nx * push; b.y += ny * push;
+      }
+    }
+
+    // Towed canisters trail behind their bandit
+    for (const c of cans) {
+      if (!c.carrier) continue;
+      const b = c.carrier;
+      const tx = b.x - Math.cos(b.a) * 26, ty = b.y - Math.sin(b.a) * 26;
+      const k = Math.min(1, dt * 10);
+      c.x += (tx - c.x) * k; c.y += (ty - c.y) * k;
+    }
+    if (cans.some(c => c.carrier) && state === 'play') {
+      towBlipT -= dt;
+      if (towBlipT <= 0) { sfx.towBlip(); towBlipT = 0.45; }
+    }
+
+    // Bullets
+    for (const bl of bullets) {
+      bl.x += bl.vx * dt; bl.y += bl.vy * dt; bl.life -= dt;
+      if (bl.x < -10 || bl.x > WW + 10 || bl.y < -10 || bl.y > WH + 10) bl.life = 0;
+      if (bl.life <= 0) continue;
+      if (bl.owner >= 0) {
+        for (const b of bandits) {
+          if (b.dead) continue;
+          if (dist2(bl, b) < (b.r + 3) ** 2) { killBandit(b, bl.owner); bl.life = 0; break; }
+        }
+      } else {
+        for (const p of players) {
+          if (!p.alive || p.inv > 0) continue;
+          if (dist2(bl, p) < 12 * 12) { killPlayer(p); bl.life = 0; break; }
+        }
+      }
+    }
+    // Ramming: tank and bandit both go up
+    for (const p of players) {
+      if (!p.alive || p.inv > 0) continue;
+      for (const b of bandits) {
+        if (b.dead) continue;
+        if (dist2(p, b) < (11 + b.r) ** 2) { killBandit(b, p.i); killPlayer(p); break; }
+      }
+    }
+    bullets = bullets.filter(b => b.life > 0);
+
+    // Bandits that drove off the edge
+    for (const b of bandits) {
+      if (b.dead || !b.entered) continue;
+      if (b.x < -40 || b.x > WW + 40 || b.y < -40 || b.y > WH + 40) {
+        b.dead = true;
+        if (b.tow) {
+          cans = cans.filter(c => c !== b.tow);
+          if (state === 'play') { sfx.lost(); banner = { text: 'FUEL LOST', t: 1.4, color: '#FF4F6D' }; }
+        }
+      }
+    }
+    bandits = bandits.filter(b => !b.dead);
+
+    // Debris
+    for (const s of shards) { s.x += s.vx * dt; s.y += s.vy * dt; s.vx *= 0.985; s.vy *= 0.985; s.rot += s.spin * dt; s.life -= dt; }
+    shards = shards.filter(s => s.life > 0);
+    for (const s of sparks) { s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; }
+    sparks = sparks.filter(s => s.life > 0);
+
+    if (state === 'play') {
+      if (!cans.length) { gameOver(); return; }
+      if (!bandits.length && !queue.length) {
+        if (!betweenWaves) { betweenWaves = true; waveGap = 2.0; }
+        waveGap -= dt;
+        if (waveGap <= 0) {
+          betweenWaves = false;
+          wave++;
+          spawnWave(wave, false);
+          banner = { text: `WAVE ${wave}`, t: 1.8, color: INK };
+          sfx.wave();
+        }
+      }
+    } else if (!bandits.length && !queue.length) {
+      // Attract mode behind the menus: bandits keep raiding until the fuel is gone, then it restocks
+      if (!cans.length) resetCans();
+      spawnWave(1 + ((Math.random() * 8) | 0), true);
+    }
+  }
+
+  // ---------- Drawing ----------
+  let lw = 1.8;
+  function tracePolys(shape) {
+    ctx.beginPath();
+    for (const poly of shape) {
+      ctx.moveTo(poly[0][0], poly[0][1]);
+      for (let k = 1; k < poly.length; k++) ctx.lineTo(poly[k][0], poly[k][1]);
+    }
+  }
+  // Vector-monitor look: a wide faint stroke for the glow, then a thin bright one
+  function glowStroke(color, alpha) {
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.22 * alpha; ctx.lineWidth = lw * 3.4; ctx.stroke();
+    ctx.globalAlpha = alpha; ctx.lineWidth = lw; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  function drawShape(shape, x, y, a, color, alpha = 1) {
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(a);
+    tracePolys(shape);
+    glowStroke(color, alpha);
+    ctx.restore();
+  }
+
+  function draw(now) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#020406';
+    ctx.fillRect(0, 0, W, H);
+
+    lw = Math.max(1.8, 1.1 / sc);
+    const sx = shake ? rand(-shake, shake) * 0.5 : 0, sy = shake ? rand(-shake, shake) * 0.5 : 0;
+    ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (ox + sx * sc), dpr * (oy + sy * sc));
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    // Arena
+    ctx.fillStyle = '#04080d';
+    ctx.fillRect(0, 0, WW, WH);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, WW, WH); ctx.clip();
+
+    const t = now / 1000;
+    for (const s of stars) {
+      ctx.globalAlpha = 0.25 + 0.2 * Math.sin(t * 1.3 + s.p);
+      ctx.fillStyle = '#9fb4d0';
+      ctx.fillRect(s.x, s.y, s.s, s.s);
+    }
+    ctx.globalAlpha = 1;
+
+    // Tow cables
+    for (const b of bandits) {
+      if (!b.tow) continue;
+      ctx.beginPath();
+      ctx.moveTo(b.x - Math.cos(b.a) * 10, b.y - Math.sin(b.a) * 10);
+      ctx.lineTo(b.tow.x, b.tow.y);
+      ctx.setLineDash([3, 4]);
+      glowStroke(b.color, 0.75);
+      ctx.setLineDash([]);
+    }
+
+    for (const c of cans) {
+      const flick = c.carrier ? 0.55 + 0.45 * Math.sin(t * 22) : 1;
+      drawShape(CAN_SHAPE, c.x, c.y, 0, FUEL, flick);
+    }
+    for (const b of bandits) drawShape(b.shape, b.x, b.y, b.a, b.color);
+
+    for (const p of players) {
+      if (!p.alive) continue;
+      if (p.inv > 0 && Math.floor(t * 10) % 2) continue;
+      drawShape(PLAYER_SHAPE, p.x, p.y, p.a, p.color);
+      if (p.thrusting) {
+        const fl = rand(7, 13);
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
+        ctx.beginPath(); ctx.moveTo(-8, -4); ctx.lineTo(-8 - fl, 0); ctx.lineTo(-8, 4);
+        glowStroke('#FFFFFF', 0.7);
+        ctx.restore();
+      }
+    }
+
+    for (const bl of bullets) {
+      ctx.beginPath();
+      ctx.moveTo(bl.x, bl.y);
+      ctx.lineTo(bl.x - bl.vx * 0.018, bl.y - bl.vy * 0.018);
+      glowStroke(bl.owner >= 0 ? '#FFFFFF' : bl.color, 1);
+    }
+
+    for (const s of shards) {
+      const c = Math.cos(s.rot), sn = Math.sin(s.rot);
+      const hx = s.hx * c - s.hy * sn, hy = s.hx * sn + s.hy * c;
+      ctx.beginPath(); ctx.moveTo(s.x - hx, s.y - hy); ctx.lineTo(s.x + hx, s.y + hy);
+      glowStroke(s.color, Math.min(1, s.life / s.max * 1.5));
+    }
+    for (const s of sparks) {
+      ctx.globalAlpha = s.life / s.max;
+      ctx.fillStyle = s.color;
+      ctx.fillRect(s.x - 1.2, s.y - 1.2, 2.4, 2.4);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Arena border
+    ctx.strokeStyle = 'rgba(61, 245, 255, 0.22)';
+    ctx.lineWidth = lw * 0.8;
+    ctx.strokeRect(0, 0, WW, WH);
+
+    drawHUD(t);
+  }
+
+  function drawHUD(t) {
+    const pad = (v, n) => String(v).padStart(n, '0');
+    ctx.font = '16px "Press Start 2P", ui-monospace, monospace';
+    ctx.textBaseline = 'top';
+    const scores = state === 'play' ? players.map(p => p.score) : lastScores;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = P_COLORS[0];
+    ctx.fillText(pad(scores[0] || 0, 6), 18, 16);
+    if (numP === 2) {
+      ctx.textAlign = 'right'; ctx.fillStyle = P_COLORS[1];
+      ctx.fillText(pad(scores[1] || 0, 6), WW - 18, 16);
+    }
+    ctx.textAlign = 'center'; ctx.fillStyle = DIM;
+    ctx.fillText('HI ' + pad(hi, 6), WW / 2, 16);
+
+    if (state === 'play') {
+      ctx.font = '12px "Press Start 2P", ui-monospace, monospace';
+      ctx.textBaseline = 'bottom';
+      ctx.textAlign = 'right'; ctx.fillStyle = DIM;
+      ctx.fillText('WAVE ' + wave, WW - 18, WH - 16);
+      // Fuel gauge: one pod per canister still on the field
+      ctx.textAlign = 'left';
+      ctx.fillText('FUEL', 18, WH - 16);
+      ctx.save();
+      ctx.translate(90, WH - 22);
+      for (let i = 0; i < cans.length; i++) {
+        ctx.save(); ctx.translate(i * 20, 0); ctx.scale(0.7, 0.7);
+        tracePolys(CAN_SHAPE);
+        glowStroke(FUEL, cans[i].carrier ? 0.35 : 1);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    if (banner) {
+      ctx.font = '26px "Press Start 2P", ui-monospace, monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.globalAlpha = Math.min(1, banner.t * 2);
+      ctx.fillStyle = banner.color;
+      ctx.fillText(banner.text, WW / 2, WH / 2 - 110);
+      ctx.globalAlpha = 1;
+    }
+    if (paused && state === 'play') {
+      ctx.fillStyle = 'rgba(2, 4, 6, 0.6)';
+      ctx.fillRect(0, 0, WW, WH);
+      ctx.font = '28px "Press Start 2P", ui-monospace, monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = INK;
+      ctx.fillText('PAUSED', WW / 2, WH / 2 - 20);
+      ctx.font = '12px "Press Start 2P", ui-monospace, monospace'; ctx.fillStyle = DIM;
+      ctx.fillText(touchEl.hidden ? 'Press P to resume' : 'Tap Resume to carry on', WW / 2, WH / 2 + 24);
+    }
+  }
+
+  // ---------- Loop ----------
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (!paused) update(dt);
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+  resetCans();
+  requestAnimationFrame(frame);
+
+  // ---------- Controls ----------
+  function setPaused(p) {
+    if (!p) initAudio();
+    paused = p;
+    for (const k in keyState) keyState[k] = false;
+    for (const k in touchIn) touchIn[k] = false;
+    if (thrustGain) thrustGain.gain.value = 0;
+    document.getElementById('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
+  }
+  document.getElementById('pauseBtn').addEventListener('click', e => { if (state === 'play') setPaused(!paused); e.currentTarget.blur(); });
+
+  window.addEventListener('keydown', e => {
+    if (KEYS[e.code]) { keyState[e.code] = true; e.preventDefault(); }
+    if (state !== 'play' && overLock <= 0 && !e.repeat) {
+      if (e.code === 'Digit1' || e.code === 'Numpad1') { startGame(1); return; }
+      if (e.code === 'Digit2' || e.code === 'Numpad2') { startGame(2); return; }
+    }
+    if ((e.code === 'KeyP' || e.code === 'Escape') && state === 'play') setPaused(!paused);
+    if (e.code === 'KeyM') { initAudio(); toggleMute(); }
+  });
+  window.addEventListener('keyup', e => { if (KEYS[e.code]) keyState[e.code] = false; });
+  window.addEventListener('blur', () => { for (const k in keyState) keyState[k] = false; });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state === 'play') setPaused(true);
+  });
+  // iPhone only lets audio restart from these events
+  ['pointerdown', 'touchend', 'click', 'keydown'].forEach(type =>
+    window.addEventListener(type, () => { if (ac) initAudio(); }, { capture: true, passive: true }));
+
+  document.getElementById('start1').addEventListener('click', () => startGame(1));
+  document.getElementById('start2').addEventListener('click', () => startGame(2));
+  document.getElementById('again1').addEventListener('click', () => startGame(1));
+  document.getElementById('again2').addEventListener('click', () => startGame(2));
+
+  // Touch controls drive player 1
+  function showTouch() { if (touchEl.hidden) { touchEl.hidden = false; resize(); } }
+  if (window.matchMedia && matchMedia('(pointer: coarse)').matches) showTouch();
+  window.addEventListener('touchstart', showTouch, { once: true, passive: true });
+  touchEl.querySelectorAll('button').forEach(btn => {
+    const k = btn.dataset.k;
+    const down = e => {
+      e.preventDefault(); initAudio();
+      btn.classList.add('on');
+      if (paused) return;
+      touchIn[k] = true;
+      if (btn.setPointerCapture) try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+    };
+    const up = e => { e.preventDefault(); btn.classList.remove('on'); touchIn[k] = false; };
+    btn.addEventListener('pointerdown', down);
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointercancel', up);
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+  });
+})();
+</script>
+</body>
+</html>
